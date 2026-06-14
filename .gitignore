@@ -1,0 +1,4 @@
+# AI bridge run artifacts (created inside target repos, not here)
+.ai-runs/
+# macOS
+.DS_Store

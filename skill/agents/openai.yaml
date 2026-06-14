@@ -1,0 +1,7 @@
+interface:
+  display_name: "Grok Bridge"
+  short_description: "Local grok CLI: review or fix code changes"
+  default_prompt: "Use $grok-bridge to review my current git changes."
+  icon_small: "./assets/grok-small.svg"
+  icon_large: "./assets/grok-large.svg"
+  brand_color: "#0B0B0F"
