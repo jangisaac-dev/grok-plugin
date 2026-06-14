@@ -39,9 +39,15 @@ a `result:` path (and `diff:` for `rescue`) and exits non-zero on failure.
 | `review` | read-only (hard) | Review current git changes for bugs/security/regressions. |
 | `adversarial-review` | read-only (hard) | Attack the change — weak assumptions, failure modes. |
 | `rescue "<task>"` | write (worktree) | Implement a focused fix; returns a diff to apply. |
+| `setup` | local check | Verify `grok` is installed + logged in (no network call). |
+| `status [job-id]` | local | List background jobs / show one. |
+| `cancel [job-id]` | local | Stop a running background job and clean up its worktree. |
 
 read-only commands use `--permission-mode plan` (writes hard-blocked). `rescue`
 runs in a throwaway git worktree and never touches the live tree.
+
+Add `--background` (or `-b`) to a run command to start it detached and get a
+`job_id` back immediately; then poll with `status` and stop with `cancel`.
 
 ## After a run
 

@@ -1,6 +1,6 @@
 ---
 description: Run a read-only adversarial Grok review that attacks the current change
-argument-hint: ''
+argument-hint: '[--background]'
 allowed-tools: Read, Bash(bash:*)
 ---
 
@@ -20,3 +20,7 @@ do not act on the findings unless the user asks. If status is `capture_failed`,
 show `stderr.log`.
 
 Note: the repo context (git diff included) is sent to the grok backend.
+
+**Background:** if the user passes `--background` (or `-b`), the run starts
+detached and returns a `job_id` immediately. Tell the user to check it with
+`/grok:status` and stop it with `/grok:cancel`; do not wait for `result.md`.

@@ -1,6 +1,6 @@
 ---
 description: Delegate a focused fix to Grok in an isolated worktree, then review its diff
-argument-hint: '<task description>'
+argument-hint: '[--background] <task description>'
 allowed-tools: Read, Bash(bash:*), Bash(git:*)
 ---
 
@@ -26,3 +26,8 @@ The command prints a `diff:` path and a `result:` path. Then:
 
 If status is `no_changes`, tell the user Grok proposed no edits and show
 `result.md`. Note: the task text and repo context are sent to the grok backend.
+
+**Background:** if the task starts with `--background` (or `-b`), the rescue runs
+detached and returns a `job_id` immediately (no diff yet). Tell the user to check
+it with `/grok:status`; when it finishes, `/grok:result` shows the captured diff.
+`/grok:cancel` stops it and cleans up the worktree.

@@ -22,7 +22,14 @@ it: `claude plugin uninstall grok@grok-local && claude plugin install grok@grok-
 | `/grok:review` | read-only | Review local git changes. Runs with `--permission-mode plan` (hard-blocks writes). |
 | `/grok:adversarial-review` | read-only | Attacks the change for weak assumptions / failure modes. |
 | `/grok:rescue <task>` | write | Implements a focused fix in an isolated git worktree; returns a diff to review. Live tree is never modified directly. |
+| `/grok:setup` | — | Check that `grok` is installed + logged in (local, no network call). |
+| `/grok:status [job-id]` | — | List recent jobs (or show one), including background-job state. |
+| `/grok:cancel [job-id]` | — | Stop a running background job and clean up its worktree. |
 | `/grok:result [job-id]` | — | Show the latest (or given) saved run. |
+
+Add `--background` (or `-b`) to `review` / `adversarial-review` / `rescue` to run
+it detached: the command returns a `job_id` immediately, and you track it with
+`/grok:status` and stop it with `/grok:cancel`.
 
 ## Safety
 

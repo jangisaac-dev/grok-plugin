@@ -31,6 +31,37 @@ Implements a focused fix. Runs in an isolated git worktree with
 executes multi-step edits). The live working tree is never modified; the edit is
 captured as `changes.diff`.
 
+### `setup`  (read-only, local)
+```bash
+bash …/grok-run.sh setup
+```
+Reports whether `grok` is on PATH, its version, and whether `~/.grok/auth.json`
+exists (logged in). No network call. Use it to diagnose a "CLI not found" or
+auth error before a real run.
+
+## Background jobs
+
+Add `--background` (or `-b`) to any run command (`review`, `adversarial-review`,
+`rescue`) to start it detached and return a `job_id` immediately instead of
+blocking. The job runs the same pipeline in a disowned subshell and writes its
+final `status.json` when done.
+
+### `status [job-id]`
+```bash
+bash …/grok-run.sh status            # table of recent jobs in this repo
+bash …/grok-run.sh status <job-id>   # full status for one job
+```
+A `running?` status means the job's process is gone before it finalized (likely
+crashed) — check that job's `worker.log`.
+
+### `cancel [job-id]`
+```bash
+bash …/grok-run.sh cancel            # cancel the most recent running job
+bash …/grok-run.sh cancel <job-id>
+```
+Kills the job's process tree, removes its isolated worktree (even if `grok` was
+killed mid-`worktree add`), and marks the job `cancelled`.
+
 ## Artifacts — `<repo>/.ai-runs/grok/<job-id>/`
 
 | file | meaning |
@@ -42,15 +73,19 @@ captured as `changes.diff`.
 | `changes.diff` | (rescue) the proposed edit — NOT applied |
 | `stderr.log` | grok stderr |
 | `status.json` | run metadata (below) |
+| `worker.log` | (background) the detached run's stdout/stderr |
+| `job.pid` | (background) PID of the running job, for `status`/`cancel` |
 
 ## `status.json` status values
 
 | status | meaning | action |
 |---|---|---|
+| `running` | background job still in progress | check later with `status` |
 | `ok` | success | present `result.md` (and `changes.diff` for rescue) |
 | `no_changes` | rescue produced no edits | tell the user; show `result.md` |
 | `error` | grok returned an error / nonzero exit | show `result.md` + `stderr.log` |
 | `capture_failed` | empty/unparseable output | show `stderr.log` |
+| `cancelled` | stopped via `cancel` | run was killed; worktree cleaned up |
 | `timed_out` | killed by timeout | suggest rerun / narrower task |
 
 The runner exits non-zero unless status is `ok` or `no_changes`.

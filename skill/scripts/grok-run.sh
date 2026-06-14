@@ -18,11 +18,27 @@ source "$HERE/lib/common.sh"
 
 COMMAND="${1:-review}"; shift || true
 
+# Slash commands pass their whole argument string as one quoted "$ARGUMENTS"
+# (injection-safe). Re-split it in-process so flags + task text parse normally.
+# This only word-splits a data string (set -f disables globbing); it is never
+# eval'd, so a ';' in the task text stays a literal arg, not a command.
+if [ "$#" -le 1 ]; then set -f; set -- ${1-}; set +f; fi
+
+# status / cancel / setup operate on existing jobs (or report a missing CLI), so
+# they must run before the `command -v grok` guard and before any job dir is made.
+case "$COMMAND" in
+  status) cmd_status grok "${1:-}"; exit 0 ;;
+  cancel) cmd_cancel grok "${1:-}"; exit 0 ;;
+  setup)  cmd_setup  grok grok "$HOME/.grok/auth.json"; exit 0 ;;
+esac
+
 EFFORT=""
+BACKGROUND=0
 TASK_ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --effort) EFFORT="${2:-}"; shift 2 || shift ;;
+    --background|-b) BACKGROUND=1; shift ;;
     *) TASK_ARGS+=("$1"); shift ;;
   esac
 done
@@ -32,6 +48,14 @@ if ! command -v grok >/dev/null 2>&1; then
   echo "ERROR: 'grok' CLI not found on PATH. Install it and run 'grok login' first." >&2
   exit 127
 fi
+
+if [ "$COMMAND" = "rescue" ] && [ -z "$TASK_TEXT" ]; then
+  echo "ERROR: rescue needs a task description." >&2; exit 2
+fi
+case "$COMMAND" in
+  review|adversarial-review|rescue) : ;;
+  *) echo "Unknown command: $COMMAND" >&2; exit 2 ;;
+esac
 
 JOB_DIR="$(new_job_dir grok)"
 collect_context "$JOB_DIR/context.txt"
@@ -134,46 +158,58 @@ extract_outcome() {
   [ -s "$md" ] && echo "ok" || echo "capture_failed"
 }
 
-case "$COMMAND" in
-  review|adversarial-review)
-    MODE="read-only"
-    grok "${GROK_COMMON[@]}" --permission-mode plan \
-      >"$JOB_DIR/result.json" 2>"$JOB_DIR/stderr.log"
-    CODE=$?
-    STATUS="$(extract_outcome "$JOB_DIR/result.json" "$JOB_DIR/result.md")"
-    [ "$CODE" -ne 0 ] && [ "$STATUS" = "ok" ] && STATUS="error"
-    [ "$STATUS" != "ok" ] && echo "WARNING: grok status=$STATUS (exit $CODE; see stderr.log / result.md)." >&2
-    write_status "$JOB_DIR" "$COMMAND" "$MODE" "$CODE" "$STATUS"
-    emit_result_pointer "$JOB_DIR"
-    ;;
+# execute_job : the heavy part (CLI call + diff + final status). Run inline for
+# foreground, or inside a disowned subshell for --background.
+execute_job() {
+  case "$COMMAND" in
+    review|adversarial-review)
+      MODE="read-only"
+      grok "${GROK_COMMON[@]}" --permission-mode plan \
+        >"$JOB_DIR/result.json" 2>"$JOB_DIR/stderr.log"
+      CODE=$?
+      STATUS="$(extract_outcome "$JOB_DIR/result.json" "$JOB_DIR/result.md")"
+      [ "$CODE" -ne 0 ] && [ "$STATUS" = "ok" ] && STATUS="error"
+      [ "$STATUS" != "ok" ] && echo "WARNING: grok status=$STATUS (exit $CODE; see stderr.log / result.md)." >&2
+      write_status "$JOB_DIR" "$COMMAND" "$MODE" "$CODE" "$STATUS"
+      emit_result_pointer "$JOB_DIR"
+      ;;
 
-  rescue)
-    MODE="write"
-    if [ -z "$TASK_TEXT" ]; then
-      echo "ERROR: rescue needs a task description." >&2; exit 2
-    fi
-    IFS=$'\t' read -r WS WS_KIND < <(make_workspace)
-    [ "$WS_KIND" = "copy" ] && touch "$WS/.aibridge-start"
-    # bypassPermissions is the only mode that actually executes multi-step edits
-    # in headless `-p` (default/acceptEdits/auto only announce). Safe here because
-    # the run is confined to a throwaway worktree.
-    ( cd "$WS" && grok "${GROK_COMMON[@]}" --permission-mode bypassPermissions ) \
-      >"$JOB_DIR/result.json" 2>"$JOB_DIR/stderr.log"
-    CODE=$?
-    OUTCOME="$(extract_outcome "$JOB_DIR/result.json" "$JOB_DIR/result.md")"
-    DIFF="$JOB_DIR/changes.diff"
-    if [ "$OUTCOME" = "error" ] || [ "$CODE" -ne 0 ]; then
-      STATUS="error"; : >"$DIFF"
-    elif capture_diff "$WS" "$WS_KIND" "$DIFF"; then
-      STATUS="ok"
-    else
-      STATUS="no_changes"
-    fi
-    remove_workspace "$WS" "$WS_KIND"
-    write_status "$JOB_DIR" "$COMMAND" "$MODE" "$CODE" "$STATUS" "$DIFF"
-    [ "$STATUS" = "error" ] && echo "WARNING: grok status=error (exit $CODE; see stderr.log)." >&2
-    emit_result_pointer "$JOB_DIR" "$DIFF"
-    ;;
-esac
+    rescue)
+      MODE="write"
+      IFS=$'\t' read -r WS WS_KIND < <(make_workspace "$JOB_DIR/workspace.path")
+      [ "$WS_KIND" = "copy" ] && touch "$WS/.aibridge-start"
+      # bypassPermissions is the only mode that actually executes multi-step edits
+      # in headless `-p` (default/acceptEdits/auto only announce). Safe here because
+      # the run is confined to a throwaway worktree.
+      ( cd "$WS" && grok "${GROK_COMMON[@]}" --permission-mode bypassPermissions ) \
+        >"$JOB_DIR/result.json" 2>"$JOB_DIR/stderr.log"
+      CODE=$?
+      OUTCOME="$(extract_outcome "$JOB_DIR/result.json" "$JOB_DIR/result.md")"
+      DIFF="$JOB_DIR/changes.diff"
+      if [ "$OUTCOME" = "error" ] || [ "$CODE" -ne 0 ]; then
+        STATUS="error"; : >"$DIFF"
+      elif capture_diff "$WS" "$WS_KIND" "$DIFF"; then
+        STATUS="ok"
+      else
+        STATUS="no_changes"
+      fi
+      remove_workspace "$WS" "$WS_KIND"
+      rm -f "$JOB_DIR/workspace.path"
+      write_status "$JOB_DIR" "$COMMAND" "$MODE" "$CODE" "$STATUS" "$DIFF"
+      [ "$STATUS" = "error" ] && echo "WARNING: grok status=error (exit $CODE; see stderr.log)." >&2
+      emit_result_pointer "$JOB_DIR" "$DIFF"
+      ;;
+  esac
+  final_exit "$STATUS"
+}
 
-final_exit "$STATUS"
+if [ "$BACKGROUND" -eq 1 ]; then
+  write_running_status "$JOB_DIR" "$COMMAND" "$([ "$COMMAND" = rescue ] && echo write || echo read-only)"
+  ( execute_job ) >"$JOB_DIR/worker.log" 2>&1 &
+  echo $! >"$JOB_DIR/job.pid"
+  disown 2>/dev/null || true
+  emit_background_pointer "$JOB_DIR" grok
+  exit 0
+fi
+
+execute_job

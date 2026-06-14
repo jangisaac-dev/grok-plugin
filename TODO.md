@@ -1,8 +1,15 @@
 # TODO — grok-bridge / grok-plugin
 
 Future work to make this as capable as the official Codex skills. The current
-release is a working v1 (read-only review + adversarial review + worktree-isolated
-rescue), usable both as a Claude Code plugin and a Codex/agents skill.
+release covers read-only review + adversarial review + worktree-isolated rescue,
+plus `setup` / `status` / `cancel` and `--background` jobs, usable both as a
+Claude Code plugin and a Codex/agents skill.
+
+## Shipped (Codex-skill parity so far)
+- [x] `setup` — local install/auth check (no network call).
+- [x] Background jobs: `--background`/`-b` + `/grok:status` + `/grok:cancel`
+      (detached run in a disowned subshell; cancel kills the process tree and
+      cleans the worktree, including the `git worktree add` init-lock race).
 
 ## Packaging / portability
 - [ ] `install-skill.sh`: copy `skill/` into `~/.agents/skills/grok-bridge`,
@@ -15,9 +22,8 @@ rescue), usable both as a Claude Code plugin and a Codex/agents skill.
 - [ ] Provide PNG icons (raster) in addition to the SVGs for UI surfaces that need them.
 
 ## Features (Codex-skill parity)
-- [ ] Background jobs: `--background` runs + `/grok:status` and `/grok:cancel`
-      (the v1 deferred these; runner is currently synchronous/foreground only).
-- [ ] Session resume: continue a previous grok conversation (`grok --continue`).
+- [ ] Session resume: continue a previous grok conversation (`grok --continue` /
+      `grok --resume <id>`; `grok sessions` to list).
 - [ ] `best-of-n`: expose `grok --best-of-n` for higher-quality rescue drafts.
 - [ ] Self-verification: optional `grok --check` loop on rescue.
 - [ ] Model selection passthrough (`--model`) and a sane effort default per model.
