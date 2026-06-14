@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Local Grok CLI bridge for Claude Code",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "grok",
       "description": "Call the local grok CLI as a read-only reviewer or write-capable rescuer.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": "./plugin"
     }
   ]
